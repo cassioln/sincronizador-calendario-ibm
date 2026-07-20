@@ -101,6 +101,7 @@ Para manter o arquivo de log `sync.log` legível e recolhível em editores de te
 
 ## 🛠️ Diretrizes de Fluxo de Trabalho (Git Workflow)
 
-1. **Commit e Push Automático:** Após as alterações propostas serem aprovadas pelo usuário e validadas nos testes, o agente de desenvolvimento deve **obrigatoriamente** realizar o `git commit` com uma mensagem descritiva (preferencialmente seguindo o padrão de Conventional Commits, ex: `feat(...)`, `fix(...)`, `style(...)`) e disparar o `git push` para sincronizar as mudanças com o repositório remoto.
+1. **Commit Automático:** Após as alterações propostas serem aprovadas pelo usuário e validadas nos testes, o agente de desenvolvimento deve **obrigatoriamente** realizar o `git commit` localmente com uma mensagem descritiva detalhando todas as mudanças realizadas (preferencialmente seguindo o padrão de Conventional Commits, ex: `feat(...)`, `fix(...)`, `style(...)`). O agente de desenvolvimento não deve disparar o `git push`, deixando a sincronização com o repositório remoto sob a responsabilidade do usuário.
+
 
 
