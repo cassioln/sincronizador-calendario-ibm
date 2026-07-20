@@ -12,6 +12,7 @@ A solução foi projetada especificamente para contornar restrições severas de
 4. **Sincronização de Status de Resposta:** O script lê o seu status de participação no Mac (Aceito, Recusado, Talvez, Pendente) e o replica visualmente na agenda do Google.
 5. **Automação de Cancelados:** Se uma reunião for cancelada na origem (Outlook), o script marcará a resposta como `Não` ("Você vai? Não") automaticamente no Google.
 6. **Dados Adicionais:** O nome do organizador original da reunião corporativa é injetado no topo das notas do evento no Google.
+7. **Logs Otimizados:** O log de execuções (`sync.log`) é formatado em árvore indentada para fácil agrupamento (folding) em editores. A lista completa de calendários disponíveis no Mac é exportada para um arquivo separado `calendars.txt` apenas quando há alterações na configuração de calendários locais.
 
 ---
 
@@ -22,7 +23,8 @@ A solução foi projetada especificamente para contornar restrições severas de
 * `.gitignore`: Configuração para impedir o versionamento de chaves e dados pessoais.
 * `credentials.json`: Arquivo de credenciais de aplicativo desktop do Google Cloud (gerado por você - **não versionar**).
 * `token.json`: Token de acesso OAuth gerado após o primeiro login (gerado automaticamente - **não versionar**).
-* `sync.log`: Log de execuções automatizadas em segundo plano.
+* `sync.log`: Log de execuções automatizadas em segundo plano, estruturado em árvore recuada para agrupamento automático em editores.
+* `calendars.txt`: Lista de contas e calendários locais mapeados no macOS (atualizado inteligentemente apenas se houver alterações de calendário - **não versionar**).
 
 ---
 

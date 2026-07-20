@@ -85,3 +85,15 @@ CREDENTIALS_FILE = os.path.join(BASE_DIR, 'credentials.json')
 * **Carga Inicial:** Feita buscando um histórico longo no passado (`DIAS_PASSADO = 1095`) e futuro (`DIAS_FUTURO = 365`).
 * **Produção Diária:** Deve operar em janela móvel curta (`DIAS_PASSADO = 7` e `DIAS_FUTURO = 90`) para otimizar velocidade de execução e evitar consumo excessivo de cotas da API.
 * Os eventos que já foram sincronizados no passado fora da janela móvel de produção **não são apagados** pelo script, pois a lógica de deleção só atua no intervalo de busca ativo.
+
+### 3. Estruturação de Logs em Árvore (Code Folding)
+Para manter o arquivo de log `sync.log` legível e recolhível em editores de texto como o VS Code:
+* Cada execução de sincronização deve iniciar com uma linha de cabeçalho sem recuo, contendo a data/hora e o nome do calendário (ex: `[dd/mm/aaaa hh:mm:ss] Sincronização IBM:`).
+* Todas as mensagens subsequentes impressas (`print`) ao longo do script devem possuir obrigatoriamente um recuo de 2 espaços no início (`  `). Isso aninha os dados sob a execução e habilita a dobra em árvore do editor.
+* Evite rotinas manuais de gravação no final de `sync.log` por dentro do Python; confie no redirecionamento transparente do stdout do Launch Agent (`StandardOutPath`).
+
+### 4. Escrita Inteligente de Calendários Disponíveis (calendars.txt)
+* A lista com todos os calendários do sistema e calendários ativos não é impressa no terminal para evitar poluir o log.
+* Essa listagem é ordenada e gravada de forma absoluta no arquivo separado `calendars.txt` na raiz do projeto.
+* O arquivo `calendars.txt` é atualizado sobrescrevendo o conteúdo (`w`) apenas se for detectada alguma alteração real nas configurações ou nomes de calendários no macOS, minimizando escritas desnecessárias no disco. Esse arquivo deve permanecer no `.gitignore`.
+

@@ -21,6 +21,7 @@ DIAS_FUTURO = 90
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CREDENTIALS_FILE = os.path.join(BASE_DIR, 'credentials.json')
 TOKEN_FILE = os.path.join(BASE_DIR, 'token.json')
+CALENDARS_FILE = os.path.join(BASE_DIR, 'calendars.txt')
 
 # Nome do calendário que será criado/utilizado no seu Google Agenda para evitar misturar com os pessoais
 GOOGLE_CALENDAR_NAME = "IBM"
@@ -34,11 +35,11 @@ def obter_servico_google():
     # Se não houver credenciais válidas, solicita login ao usuário
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            print("Token do Google expirado. Atualizando token...")
+            print("  Token do Google expirado. Atualizando token...")
             try:
                 creds.refresh(Request())
             except Exception as e:
-                print(f"Falha ao atualizar token: {e}. Iniciando novo login...")
+                print(f"  Falha ao atualizar token: {e}. Iniciando novo login...")
                 creds = None
                 
         if not creds:
@@ -57,17 +58,17 @@ def obter_servico_google():
 
 def obter_ou_criar_calendario_google(service, nome_agenda):
     """Busca o ID de um calendário no Google pelo nome. Se não existir, cria um novo."""
-    print(f"Verificando se o calendário '{nome_agenda}' existe no seu Google Agenda...")
+    print(f"  Verificando se o calendário '{nome_agenda}' existe no seu Google Agenda...")
     calendar_list = service.calendarList().list().execute()
     items = calendar_list.get('items', [])
     
     for item in items:
         if item.get('summary') == nome_agenda:
-            print(f"Calendário '{nome_agenda}' encontrado!")
+            print(f"  Calendário '{nome_agenda}' encontrado!")
             return item.get('id')
             
     # Se não encontrar, cria um novo
-    print(f"Calendário '{nome_agenda}' não encontrado. Criando um novo...")
+    print(f"  Calendário '{nome_agenda}' não encontrado. Criando um novo...")
     calendar_body = {
         'summary': nome_agenda,
         'timeZone': 'America/Sao_Paulo'
@@ -105,25 +106,10 @@ def ler_eventos_macos(store, dias_passado, dias_futuro):
     ns_start = NSDate.dateWithTimeIntervalSince1970_(start_date.timestamp())
     ns_end = NSDate.dateWithTimeIntervalSince1970_(end_date.timestamp())
     
-    # 1. Obter e listar todos os calendários do sistema para ajudar na identificação da conta
+    # 1. Obter todos os calendários do sistema
     # 0 representa EKEntityTypeEvent
     todos_calendarios = store.calendarsForEntityType_(0)
     
-    print("\n=== Calendários Disponíveis no seu Mac ===")
-    contas_detectadas = set()
-    for cal in todos_calendarios:
-        cal_title = cal.title()
-        source_title = cal.source().title()
-        contas_detectadas.add(source_title)
-        print(f"- Nome: '{cal_title}' | Conta (Source): '{source_title}'")
-    print("==========================================\n")
-
-    if not CONTA_CALENDARIO_FILTRO:
-        print("[AVISO] A variável CONTA_CALENDARIO_FILTRO está vazia.")
-        print(f"Por favor, edite o script e escolha uma das contas listadas acima (provavelmente contendo 'ibm' ou 'Exchange').")
-        print("Sincronização interrompida para configuração.")
-        return []
-
     # 2. Filtrar os calendários que correspondem à conta corporativa desejada
     calendarios_alvo = []
     for cal in todos_calendarios:
@@ -140,15 +126,50 @@ def ler_eventos_macos(store, dias_passado, dias_futuro):
                 # Caso contrário, adiciona todos os calendários dessa conta
                 calendarios_alvo.append(cal)
 
-    if not calendarios_alvo:
-        print(f"[ALERTA] Nenhum calendário encontrado para a conta '{CONTA_CALENDARIO_FILTRO}'")
+    # 3. Gerar e atualizar a listagem de calendários no arquivo à parte (apenas se houver mudança)
+    try:
+        # Montar a string do conteúdo de forma ordenada
+        linhas_disponiveis = []
+        for cal in todos_calendarios:
+            linhas_disponiveis.append(f"- Nome: '{cal.title()}' | Conta (Source): '{cal.source().title()}'")
+        linhas_disponiveis.sort()
+        
+        linhas_sincronizados = []
+        for c in calendarios_alvo:
+            linhas_sincronizados.append(f"  - '{c.title()}' (Conta: '{c.source().title()}')")
+        linhas_sincronizados.sort()
+        
+        conteudo_cal = "=== Calendários Disponíveis no seu Mac ===\n"
+        conteudo_cal += "\n".join(linhas_disponiveis) + "\n"
+        conteudo_cal += "==========================================\n\n"
+        conteudo_cal += "Sincronizando apenas os seguintes calendários locais:\n"
+        conteudo_cal += "\n".join(linhas_sincronizados) + "\n"
+        
+        # Verificar se o arquivo já existe e ler o conteúdo
+        conteudo_atual = ""
+        if os.path.exists(CALENDARS_FILE):
+            with open(CALENDARS_FILE, 'r', encoding='utf-8') as f:
+                conteudo_atual = f.read()
+                
+        # Atualiza o arquivo somente se houver alteração
+        if conteudo_atual != conteudo_cal:
+            print("  [INFO] Alteração detectada nos calendários do Mac. Atualizando calendars.txt...")
+            with open(CALENDARS_FILE, 'w', encoding='utf-8') as f:
+                f.write(conteudo_cal)
+    except Exception as e:
+        print(f"  Erro ao gerenciar arquivo de calendários: {e}")
+
+    if not CONTA_CALENDARIO_FILTRO:
+        print("  [AVISO] A variável CONTA_CALENDARIO_FILTRO está vazia.")
+        print("  Por favor, edite o script e escolha uma das contas listadas no arquivo 'calendars.txt'.")
+        print("  Sincronização interrompida para configuração.")
         return []
 
-    print(f"Sincronizando apenas os seguintes calendários locais:")
-    for c in calendarios_alvo:
-        print(f"  - '{c.title()}' (Conta: '{c.source().title()}')")
+    if not calendarios_alvo:
+        print(f"  [ALERTA] Nenhum calendário encontrado para a conta '{CONTA_CALENDARIO_FILTRO}'")
+        return []
 
-    # 3. Buscar os eventos apenas nos calendários filtrados
+    # 4. Buscar os eventos apenas nos calendários filtrados
     # Passamos a lista de calendários em vez de None
     predicate = store.predicateForEventsWithStartDate_endDate_calendars_(
         ns_start, ns_end, calendarios_alvo
@@ -164,7 +185,7 @@ def obter_eventos_google(service, google_calendar_id, dias_passado, dias_futuro)
     time_min = (now - datetime.timedelta(days=dias_passado)).isoformat()
     time_max = (now + datetime.timedelta(days=dias_futuro)).isoformat()
     
-    print("Buscando eventos existentes no Google Agenda...")
+    print("  Buscando eventos existentes no Google Agenda...")
     events_result = service.events().list(
         calendarId=google_calendar_id,
         timeMin=time_min,
@@ -179,15 +200,18 @@ def sincronizar_agendas():
     store = EKEventStore.alloc().init()
     done_event = threading.Event()
     
+    agora = datetime.datetime.now()
+    print(f"\n[{agora.strftime('%d/%m/%Y %H:%M:%S')}] Sincronização IBM:")
+    
     def completion(granted, error):
         if granted:
-            print("Acesso ao Calendário do macOS confirmado.")
+            print("  Acesso ao Calendário do macOS confirmado.")
             try:
                 realizar_sincronizacao(store)
             except Exception as e:
-                print(f"Erro durante a sincronização: {e}")
+                print(f"  Erro durante a sincronização: {e}")
         else:
-            print("Erro: Permissão de acesso ao calendário local negada.")
+            print("  Erro: Permissão de acesso ao calendário local negada.")
         done_event.set()
 
     # Solicita acesso às APIs do macOS de acordo com a versão do sistema
@@ -198,12 +222,12 @@ def sincronizar_agendas():
             # 0 representa EKEntityTypeEvent no EventKit do macOS
             store.requestAccessToEntityType_completion_(0, completion)
     except Exception as e:
-        print(f"Erro ao obter permissão via API: {e}")
+        print(f"  Erro ao obter permissão via API: {e}")
         # Tenta rodar direto caso já tenha a permissão no terminal
         try:
             realizar_sincronizacao(store)
         except Exception as ex:
-            print(f"Falha de execução direta: {ex}")
+            print(f"  Falha de execução direta: {ex}")
         done_event.set()
         
     done_event.wait()
@@ -217,8 +241,8 @@ def realizar_sincronizacao(store):
     eventos_mac = ler_eventos_macos(store, DIAS_PASSADO, DIAS_FUTURO)
     eventos_google = obter_eventos_google(google_service, google_calendar_id, DIAS_PASSADO, DIAS_FUTURO)
     
-    print(f"Lidos {len(eventos_mac)} eventos do Mac.")
-    print(f"Lidos {len(eventos_google)} eventos do Google Agenda (Calendário: {GOOGLE_CALENDAR_NAME}).")
+    print(f"  Lidos {len(eventos_mac)} eventos do Mac.")
+    print(f"  Lidos {len(eventos_google)} eventos do Google Agenda (Calendário: {GOOGLE_CALENDAR_NAME}).")
     
     # Mapeia eventos do Google usando o metadado 'mac_event_id'
     google_events_map = {}
@@ -346,7 +370,7 @@ def realizar_sincronizacao(store):
             )
             
             if mudou:
-                print(f"Atualizando compromisso: {event_body['summary']}")
+                print(f"  Atualizando compromisso: {event_body['summary']}")
                 google_service.events().patch(
                     calendarId=google_calendar_id,
                     eventId=g_id,
@@ -358,7 +382,7 @@ def realizar_sincronizacao(store):
                 mantidos += 1
         else:
             # Evento novo - Insere no Google Calendar
-            print(f"Adicionando novo compromisso: {event_body['summary']}")
+            print(f"  Adicionando novo compromisso: {event_body['summary']}")
             google_service.events().insert(
                 calendarId=google_calendar_id,
                 body=event_body,
@@ -371,7 +395,7 @@ def realizar_sincronizacao(store):
         if mac_id not in mac_event_ids_ativos:
             g_id = g_ev['id']
             summary = g_ev.get('summary', '(Sem título)')
-            print(f"Removendo compromisso deletado no Mac: {summary}")
+            print(f"  Removendo compromisso deletado no Mac: {summary}")
             try:
                 google_service.events().delete(
                     calendarId=google_calendar_id,
@@ -379,32 +403,20 @@ def realizar_sincronizacao(store):
                 ).execute()
                 removidos += 1
             except Exception as e:
-                print(f"Erro ao remover evento {summary} do Google: {e}")
+                print(f"  Erro ao remover evento {summary} do Google: {e}")
 
     agora = datetime.datetime.now()
     inicio_str = (agora - datetime.timedelta(days=DIAS_PASSADO)).strftime('%d/%m/%Y')
     fim_str = (agora + datetime.timedelta(days=DIAS_FUTURO)).strftime('%d/%m/%Y')
 
-    print("\n=== Relatório de Sincronização ===")
-    print(f"Data/Hora: {agora.strftime('%d/%m/%Y %H:%M:%S')}")
-    print(f"Range de dias lido/atualizado: -{DIAS_PASSADO} dias ({inicio_str}) a +{DIAS_FUTURO} dias ({fim_str})")
-    print(f"Novos eventos adicionados: {adicionados}")
-    print(f"Eventos atualizados: {atualizados}")
-    print(f"Eventos removidos do Google: {removidos}")
-    print(f"Eventos inalterados: {mantidos}")
-    print("Sincronização concluída com sucesso!")
-
-    # Registrar no fim do sync.log de forma resiliente
-    try:
-        sync_log_path = os.path.join(BASE_DIR, 'sync.log')
-        with open(sync_log_path, 'a', encoding='utf-8') as log_file:
-            log_file.write(
-                f"\n[{agora.strftime('%d/%m/%Y %H:%M:%S')}] Sincronização executada. "
-                f"Range: -{DIAS_PASSADO} dias ({inicio_str}) a +{DIAS_FUTURO} dias ({fim_str}). "
-                f"Adicionados: {adicionados}, Atualizados: {atualizados}, Removidos: {removidos}, Inalterados: {mantidos}\n"
-            )
-    except Exception as e:
-        print(f"Erro ao gravar no arquivo de log: {e}")
+    print("  === Relatório de Sincronização ===")
+    print(f"  Data/Hora: {agora.strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"  Range de dias lido/atualizado: -{DIAS_PASSADO} dias ({inicio_str}) a +{DIAS_FUTURO} dias ({fim_str})")
+    print(f"  Novos eventos adicionados: {adicionados}")
+    print(f"  Eventos atualizados: {atualizados}")
+    print(f"  Eventos removidos do Google: {removidos}")
+    print(f"  Eventos inalterados: {mantidos}")
+    print("  Sincronização concluída com sucesso!")
 
 if __name__ == "__main__":
     sincronizar_agendas()
