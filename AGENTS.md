@@ -97,3 +97,10 @@ Para manter o arquivo de log `sync.log` legível e recolhível em editores de te
 * Essa listagem é ordenada e gravada de forma absoluta no arquivo separado `calendars.txt` na raiz do projeto.
 * O arquivo `calendars.txt` é atualizado sobrescrevendo o conteúdo (`w`) apenas se for detectada alguma alteração real nas configurações ou nomes de calendários no macOS, minimizando escritas desnecessárias no disco. Esse arquivo deve permanecer no `.gitignore`.
 
+---
+
+## 🛠️ Diretrizes de Fluxo de Trabalho (Git Workflow)
+
+1. **Commit e Push Automático:** Após as alterações propostas serem aprovadas pelo usuário e validadas nos testes, o agente de desenvolvimento deve **obrigatoriamente** realizar o `git commit` com uma mensagem descritiva (preferencialmente seguindo o padrão de Conventional Commits, ex: `feat(...)`, `fix(...)`, `style(...)`) e disparar o `git push` para sincronizar as mudanças com o repositório remoto.
+
+
