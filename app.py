@@ -381,12 +381,30 @@ def realizar_sincronizacao(store):
             except Exception as e:
                 print(f"Erro ao remover evento {summary} do Google: {e}")
 
+    agora = datetime.datetime.now()
+    inicio_str = (agora - datetime.timedelta(days=DIAS_PASSADO)).strftime('%d/%m/%Y')
+    fim_str = (agora + datetime.timedelta(days=DIAS_FUTURO)).strftime('%d/%m/%Y')
+
     print("\n=== Relatório de Sincronização ===")
+    print(f"Data/Hora: {agora.strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"Range de dias lido/atualizado: -{DIAS_PASSADO} dias ({inicio_str}) a +{DIAS_FUTURO} dias ({fim_str})")
     print(f"Novos eventos adicionados: {adicionados}")
     print(f"Eventos atualizados: {atualizados}")
     print(f"Eventos removidos do Google: {removidos}")
     print(f"Eventos inalterados: {mantidos}")
     print("Sincronização concluída com sucesso!")
+
+    # Registrar no fim do sync.log de forma resiliente
+    try:
+        sync_log_path = os.path.join(BASE_DIR, 'sync.log')
+        with open(sync_log_path, 'a', encoding='utf-8') as log_file:
+            log_file.write(
+                f"\n[{agora.strftime('%d/%m/%Y %H:%M:%S')}] Sincronização executada. "
+                f"Range: -{DIAS_PASSADO} dias ({inicio_str}) a +{DIAS_FUTURO} dias ({fim_str}). "
+                f"Adicionados: {adicionados}, Atualizados: {atualizados}, Removidos: {removidos}, Inalterados: {mantidos}\n"
+            )
+    except Exception as e:
+        print(f"Erro ao gravar no arquivo de log: {e}")
 
 if __name__ == "__main__":
     sincronizar_agendas()
