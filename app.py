@@ -201,7 +201,7 @@ def sincronizar_agendas():
     done_event = threading.Event()
     
     agora = datetime.datetime.now()
-    print(f"\n[{agora.strftime('%d/%m/%Y %H:%M:%S')}] Sincronização IBM:")
+    print(f"\n[{agora.strftime('%d/%m/%Y %H:%M:%S')}] Sync AppleCalendar/IBM -> GoogleCalendar/IBM:")
     
     def completion(granted, error):
         if granted:
@@ -290,8 +290,6 @@ def realizar_sincronizacao(store):
             google_status = 'needsAction'
             
         # Tratamento especial de Eventos Cancelados:
-        # Se o evento foi cancelado no Mac ou o título contém "cancelado:"/"canceled:",
-        # marcamos o status do Google como 'declined' (Não)
         is_cancelado = False
         try:
             if m_ev.status() == 3: # 3 representa EKEventStatusCanceled
@@ -299,13 +297,24 @@ def realizar_sincronizacao(store):
         except Exception:
             pass
             
-        titulo_limpo = (m_ev.title() or "").strip().lower()
-        if titulo_limpo.startswith("cancelado:") or titulo_limpo.startswith("canceled:"):
+        titulo_bruto = (m_ev.title() or "(Sem título)").strip()
+        titulo_lower = titulo_bruto.lower()
+        if titulo_lower.startswith("cancelado:") or titulo_lower.startswith("canceled:"):
             is_cancelado = True
             
+        # Prefixo visual de status no título (evita o uso do campo 'attendees' no Google API,
+        # o que gerava convites duplicados indesejados no Outlook da IBM via iCal)
+        prefixo = ""
         if is_cancelado:
-            google_status = 'declined'
-            
+            if not titulo_lower.startswith("cancelado:") and not titulo_lower.startswith("canceled:"):
+                prefixo = "[CANCELADO] "
+        elif participante_status == 4: # Tentative / Talvez
+            prefixo = "[Talvez] "
+        elif participante_status in (1, 0): # Pending / Unknown
+            prefixo = "[?] "
+
+        summary_final = prefixo + titulo_bruto
+
         # Extrair organizador original do Mac de forma resiliente
         organizador_linha = ""
         try:
@@ -322,13 +331,14 @@ def realizar_sincronizacao(store):
         except Exception:
             pass
 
-        # Constrói o corpo do evento para o Google
+        # Constrói o corpo do evento para o Google como evento simples (sem attendees para evitar duplicação no Outlook)
         event_body = {
-            'summary': m_ev.title() or "(Sem título)",
+            'summary': summary_final,
             'location': m_ev.location() or "",
             'description': organizador_linha + (m_ev.notes() or ""),
             'start': start_payload,
             'end': end_payload,
+            'attendees': [],  # Garante a remoção de attendees antigos para eliminar duplicações no Outlook
             'extendedProperties': {
                 'private': {
                     'mac_event_id': mac_id
@@ -336,27 +346,13 @@ def realizar_sincronizacao(store):
             }
         }
         
-        # Configuração: Se False, sincroniza o status de todos os eventos. Se True, apenas eventos com "teste status".
-        TESTE_CONTROLADO_STATUS = False
-        titulo_evento = (m_ev.title() or "").lower()
-        
-        if not TESTE_CONTROLADO_STATUS or "teste status" in titulo_evento:
-            event_body['attendees'] = [
-                {
-                    'email': google_calendar_id, # ID da própria agenda secundária (IBM)
-                    'responseStatus': google_status,
-                    'self': True
-                }
-            ]
-        
         # Verifica se o evento já existe no Google
         if mac_id in google_events_map:
             g_ev = google_events_map[mac_id]
             g_id = g_ev['id']
             
-            # Compara se houve mudanças relevantes (incluindo o status do participante)
+            # Compara se houve mudanças relevantes (incluindo presença de attendees antigos)
             g_attendees = g_ev.get('attendees', [])
-            g_status = g_attendees[0].get('responseStatus') if g_attendees else 'accepted'
             
             mudou = (
                 g_ev.get('summary') != event_body['summary'] or
@@ -366,7 +362,7 @@ def realizar_sincronizacao(store):
                 g_ev.get('start', {}).get('date') != start_payload.get('date') or
                 g_ev.get('end', {}).get('dateTime') != end_payload.get('dateTime') or
                 g_ev.get('end', {}).get('date') != end_payload.get('date') or
-                g_status != google_status
+                bool(g_attendees)  # Se ainda houver attendees no Google, força atualização para limpar
             )
             
             if mudou:

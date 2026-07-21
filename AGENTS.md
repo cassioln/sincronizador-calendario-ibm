@@ -55,19 +55,15 @@ timestamp_start = int(m_ev.startDate().timeIntervalSince1970())
 mac_id = f"{m_ev.uniqueIdentifier()}_{timestamp_start}"
 ```
 
-### 2. Status Nativos de Resposta em Agendas Secundárias (Attendees)
-Ao atualizar o status do evento ("Você vai? Sim/Não/Talvez") na agenda secundária dedicados ("IBM"):
-* **Erro Comum:** Adicionar o e-mail principal do usuário (`cassiolima.n@gmail.com`) na lista de participantes. Isso faz com que o Google crie um convite duplicado na agenda principal do usuário.
-* **Correto:** Use o ID/e-mail da **própria agenda secundária** (`google_calendar_id`) no campo `email` do participante com `'self': True`. Isso aplica o status visual (como tracejado de provisório) diretamente no calendário "IBM" e impede qualquer duplicação na agenda principal:
-```python
-event_body['attendees'] = [
-    {
-        'email': google_calendar_id, # ID do próprio calendário secundário
-        'responseStatus': google_status, # 'accepted', 'declined', 'tentative', 'needsAction'
-        'self': True
-    }
-]
-```
+### 2. Status de Resposta e Prevenção de Duplicação no Outlook (Attendees)
+Ao sincronizar eventos para o Google Calendar:
+* **CRÍTICO:** **NUNCA** adicione elementos ao array `attendees` do evento no Google Calendar API. O envio de `attendees` faz com que o Google crie metadados de convite iCal que, quando sincronizados com o app Calendário/Internet Accounts do macOS, são re-injetados pelo macOS na caixa corporativa do Outlook (IBM) como convites pendentes tendo `cassiolima.n@gmail.com` como remetente/organizador, gerando duplicações indesejadas na conta corporativa.
+* **Correto:** Defina sempre `'attendees': []` no `event_body` para garantir que os eventos permaneçam como itens pessoais simples (Single Events) sem convites externos.
+* **Status Visual via Prefixo:** Represente os status de resposta do participante ou cancelamento diretamente via prefixo visual no `summary` (título) do evento:
+  * Provisório/Talvez (`participante_status == 4`): Prefixo `[Talvez] `
+  * Pendente (`participante_status in (1, 0)`): Prefixo `[?] `
+  * Cancelado (`status == 3` ou título inicia com "cancelado:"): Prefixo `[CANCELADO] `
+  * Aceito (`participante_status == 2`): Título limpo normal.
 
 ---
 
@@ -88,7 +84,7 @@ CREDENTIALS_FILE = os.path.join(BASE_DIR, 'credentials.json')
 
 ### 3. Estruturação de Logs em Árvore (Code Folding)
 Para manter o arquivo de log `sync.log` legível e recolhível em editores de texto como o VS Code:
-* Cada execução de sincronização deve iniciar com uma linha de cabeçalho sem recuo, contendo a data/hora e o nome do calendário (ex: `[dd/mm/aaaa hh:mm:ss] Sincronização IBM:`).
+* Cada execução de sincronização deve iniciar com uma linha de cabeçalho sem recuo, contendo a data/hora e o nome do calendário (ex: `[dd/mm/aaaa hh:mm:ss] Sync AppleCalendar/IBM -> GoogleCalendar/IBM:`).
 * Todas as mensagens subsequentes impressas (`print`) ao longo do script devem possuir obrigatoriamente um recuo de 2 espaços no início (`  `). Isso aninha os dados sob a execução e habilita a dobra em árvore do editor.
 * Evite rotinas manuais de gravação no final de `sync.log` por dentro do Python; confie no redirecionamento transparente do stdout do Launch Agent (`StandardOutPath`).
 
